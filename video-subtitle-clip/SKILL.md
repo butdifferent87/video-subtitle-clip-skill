@@ -456,7 +456,7 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 <원본이름>_19m20s-31m50s_markers.txt ← 연출/해법 마커 목록
 ```
 
-**B. 렉처 전체** (렌더 없음)
+**B. 렉처 전체** (렌더 없음) — **원본 영상과 같은 폴더**에 둔다. 팟플레이어가 같은 이름의 자막·책갈피를 자동으로 불러오게. 같은 이름 파일이 이미 있으면 덮어쓰기 전에 묻는다. (B 에서 아래 「산출물 폴더」는 원본 영상 폴더를 뜻한다.)
 ```
 <원본이름>.srt            ← 이중 자막 1개
 <원본이름>.pbf            ← 팟플레이어 책갈피 (영상 옆에 두면 자동 로드)
@@ -470,7 +470,7 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 - [ ] `qc.py` FAIL 0 (6-g), 큐 수 원어 = 번역
 - [ ] A: 렌더본 재받아쓰기로 `check_sync.py` 타이밍 검증(6-a)
 - [ ] 산출물 폴더에 이중 `.srt` 1개만 (`.ko.srt`/`.en.srt` 없음)
-- [ ] `_markers.txt` 가 있고, 「해법 없음」 항목은 이유를 확인했다
+- [ ] `_markers.txt` 가 있고, 「해법 없음」 항목은 이유를 확인했다. 마커 이름은 원어만(한국어 병기 없음)
 - [ ] A: `ffprobe -v error -show_chapters OUT_sub.mp4` 로 챕터 확인, 프레임 눈 검수(6-b)
 - [ ] B: `.pbf` 이름이 영상 이름과 같다
 - [ ] 결과 폴더를 열어 보여준다
