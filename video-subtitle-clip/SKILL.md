@@ -465,6 +465,8 @@ python3 scripts/qc.py --kr ko.srt --other ja.srt --words seg.json \
 python3 scripts/qc.py --kr ko.srt --other en.srt --words seg.json --wav seg.wav
 ```
 
+⚠️ **cpp 엔진(whisper.cpp) 받아쓰기면 L3 「0초 단어」 경보가 수백 개 뜬다** — 토큰 시각이 거칠어서 생기는 가짜다(실측 Woody DVD1: 2,783큐 중 약 450개, 싱크 L2 는 정상). 이때 L3 은 무시하고, 대신 **긴 세그먼트(20초+)·영상 끝 음악 구간**을 눈으로 본다. 실측으로 끝 크레딧 음악 위에 `To be continued...`·`Thank you.`·`Transcription by CastingWords` 3줄이 지어져 있었다.
+
 FAIL 이 뜨면 그 큐를 **양쪽 트랙에서 같이 지운다.** `fw_transcribe.py` 는 이제 단어 확신도·세그먼트 무음확률을 저장한다.
 
 **L3x 두 번째 받아쓰기 대조 — 단어 하나만 틀린 오류**
