@@ -19,7 +19,7 @@ description: 영상에서 원하는 구간만 잘라내고 자막을 붙여 완�
 |----|--------|
 | `/opt/homebrew/opt/ffmpeg@7/bin/ffmpeg` | `ffmpeg` (PATH). `winget install Gyan.FFmpeg` 은 libass 포함 full 빌드라 그대로 자막을 태운다 |
 | `/opt/homebrew/bin/yt-dlp` | `yt-dlp` (PATH) |
-| `/opt/homebrew/bin/whisper` | `whisper` (pip `openai-whisper`) 또는 `scripts/fw_transcribe.py` |
+| `/opt/homebrew/bin/whisper` | **`scripts/fw_transcribe.py` 를 쓴다** — 엔비디아 GPU 가 있으면 자동으로 CUDA 로 돈다 |
 | `python3` | `python` (Microsoft Store 가짜 `python3` 가 잡히면 실패한다) |
 | `bash scripts/burn.sh` | Git Bash 에서 그대로 실행 (Claude Code 윈도우판은 Git Bash 를 쓴다) |
 | 폰트 `Apple SD Gothic Neo` | `Malgun Gothic` (기본값이 자동으로 바뀜) |
@@ -38,14 +38,19 @@ description: 영상에서 원하는 구간만 잘라내고 자막을 붙여 완�
 | `ffmpeg` (기본) | `/opt/homebrew/bin/ffmpeg` | 자르기·변환만. **자막 필터 없음** |
 | `whisper` | `/opt/homebrew/bin/whisper` | 자막 없을 때 STT |
 | PO Token 플러그인 | `~/bgutil-ytdlp-pot-provider/server` | 유튜브 403 이 쿠키로도 안 풀릴 때 |
-| `faster_whisper` | pip 패키지 (1.2.1) | **30분 넘는 영상**의 받아쓰기 → `scripts/fw_transcribe.py` |
+| `whisper-cli` (whisper.cpp) | `brew install whisper-cpp` + 모델 `~/.cache/whisper/models/ggml-large-v3-turbo.bin` | **맥 받아쓰기 기본 엔진** (Metal GPU) |
+| `faster_whisper` | pip 패키지 | 윈도우(엔비디아 GPU)·예비 엔진 |
+
+🔴 **받아쓰기는 항상 `scripts/fw_transcribe.py` 로.** 맥·윈도우 공용이고 가장 빠른 엔진을 알아서 고른다 — 엔비디아 GPU면 `cuda`, 맥이면 `cpp`(whisper.cpp), 둘 다 없으면 `cpu`. 출력 JSON 형식이 같아 뒤 단계 스크립트를 그대로 쓴다. `python3 scripts/fw_transcribe.py --check` 로 어느 엔진이 잡히는지 먼저 본다.
 
 **실측 속도 (M3 Pro, 10스레드)** — 예고할 때 이 숫자를 쓴다.
 
 | 방식 | 배속 | 108분 오디오 |
 |------|------|-------------|
-| `whisper` medium | 0.3~1배 | 2~5시간 |
-| `fw_transcribe.py` medium int8 + VAD + word_timestamps | **1.5배** | **68분** |
+| `whisper` medium (CPU) | 0.3~1배 | 2~5시간 |
+| `fw_transcribe.py` cpu 엔진 (medium int8 + VAD) | 1.5~2.8배 | 40~70분 |
+| **`fw_transcribe.py` cpp 엔진 (맥 GPU, large-v3-turbo)** | **약 15~20배** | **약 6분** |
+| `fw_transcribe.py` cuda 엔진 (윈도우 RTX) | 아직 실측 없음 — 처음 돌리면 이 칸을 채운다 | |
 | 자막 태우기 (1080p, x264 slow crf18) | 약 1배 | 2~3시간 |
 | **자막 트랙 심기 (`-c copy`)** | — | **25초** |
 
@@ -204,14 +209,15 @@ ffmpeg -i "INPUT" -map 0:s:0 -c:s srt out.srt
 python3 scripts/smi2srt.py "input.smi" "output.srt"
 ```
 
-**Whisper STT** — 오디오만 뽑아서 돌리면 훨씬 빠르다:
+**Whisper STT** — 오디오만 뽑아서 `fw_transcribe.py` 로 돌린다:
 
 ```bash
 ffmpeg -i "INPUT" -vn -ac 1 -ar 16000 -c:a pcm_s16le audio.wav
-whisper audio.wav --model medium --language ja --output_format srt --output_dir .
+python3 scripts/fw_transcribe.py audio.wav words.json turbo ja "도메인 용어"
+python3 scripts/srt_from_whisper.py words.json base.srt --max-dur 4
 ```
 
-`--language`는 알면 반드시 지정한다(자동 감지가 틀리면 통째로 엉뚱한 언어로 받아쓴다). 모델은 `medium`이 기본, 짧고 또렷하면 `small`, 웅얼거리거나 중요하면 `large-v3`. CPU라 실시간의 1~3배쯤 걸리니, 10분 넘는 영상이면 백그라운드로 돌리고 사용자에게 예상 시간을 알려준다.
+`LANG`(넷째 인자)은 알면 반드시 지정한다(자동 감지가 틀리면 통째로 엉뚱한 언어로 받아쓴다). 모델은 `turbo`(large-v3-turbo)가 기본 — medium 보다 정확하고 GPU 에서 빠르다. 5분 넘는 영상이면 백그라운드로 돌리고 위 속도표로 예상 시간을 알려준다.
 
 **자동생성 자막·STT는 그대로 태우지 않는다.** 구두점이 없고 고유명사가 깨진다. 태우기 전에 읽고 교정한다 — 특히 사람 이름·지명·전문 용어. 교정본을 사용자에게 보여주고 넘어가는 게 안전하다.
 
@@ -383,8 +389,7 @@ ffmpeg -i IN.mp4 -i dual.hold.srt -i ko.srt -i en.srt -map 0 -map 1 -map 2 -map 
 
 ```bash
 ffmpeg -i OUT.mp4 -vn -ac 1 -ar 16000 -c:a pcm_s16le out.wav
-whisper out.wav --model medium --language en --output_format json \
-  --word_timestamps True --output_dir . --condition_on_previous_text False
+python3 scripts/fw_transcribe.py out.wav out.json turbo en
 
 python3 scripts/check_sync.py cut.hold.srt out.json --tol 0.3
 ```
@@ -498,13 +503,15 @@ python3 scripts/qc.py ... --ref yt.en-orig.srt
 
 **대신 SRT 파일을 산출물로 준다.** 사용자가 직접 열어 훑고, 고칠 곳을 알려주면 그 줄만 고친다.
 
-**받아쓰기는 `faster_whisper` 로.** 기본 `whisper` 는 CPU 에서 실시간의 1~3배가 걸린다.
+**받아쓰기는 `fw_transcribe.py` 로** (GPU 엔진 자동 선택).
 
 ```bash
-python3 scripts/fw_transcribe.py seg.wav seg.json medium en "도메인 용어를 여기 나열"
+python3 scripts/fw_transcribe.py seg.wav seg.json turbo en "도메인 용어를 여기 나열"
 ```
 
-⚠️ **속도를 부풀려 말하지 마라.** faster-whisper 를 「4~8배」로 예고했다가 실측 **1.5배**가 나왔다(M3 Pro, medium, int8, 10스레드). `word_timestamps` 와 VAD 를 켜면 그만큼 느려진다. 108분 오디오에 **68분** 걸렸다. 예고는 실측값 기준으로 한다.
+⚠️ **속도를 부풀려 말하지 마라.** faster-whisper CPU 를 「4~8배」로 예고했다가 실측 **1.5배**가 나왔다. 예고는 위 속도표의 실측값으로, 그리고 `--check` 로 확인한 엔진 기준으로 한다. 맥 GPU(whisper.cpp)로 바꾼 뒤 2시간 30분 DVD 가 몇 분대로 줄었다(2026-11-20).
+
+**두 컴퓨터로 나눠 돌리기** — 시리즈(DVD 여러 장)는 맥·윈도우가 한 장씩 맡아도 된다. 받아쓰기에 필요한 건 소리뿐이라 `audio.wav`(16kHz 모노, 2.5시간 ≈ 290MB) 또는 `ffmpeg -i IN -vn -ac 1 -ar 16000 -c:a flac a.flac`(더 작음)만 옮기고, 결과 `words.json`(몇 MB)만 돌려받는다.
 
 **번역은 배치로, 큐 수를 매번 검증한다.**
 

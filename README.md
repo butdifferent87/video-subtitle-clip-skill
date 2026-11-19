@@ -17,9 +17,25 @@
 4. **PowerShell·Claude Code 를 껐다 켜기** — 새 설정이 적용되도록.
 5. Claude Code 에서 "이 유튜브 영상 3:20~5:10 잘라서 자막 붙여줘" 처럼 말하면 스킬이 동작한다.
 
+엔비디아 그래픽카드(RTX 등)가 있으면 `install.ps1` 이 GPU 받아쓰기 부품(cuBLAS·cuDNN)까지 깔아서, 받아쓰기가 GPU 로 돈다. 설치 끝에 「GPU 받아쓰기 준비 끝」이 보이면 된다.
+
+## 맥에 설치하기
+
+이 폴더에서 `bash install.sh` — ffmpeg@7·yt-dlp·whisper.cpp 설치, 받아쓰기 모델(1.6GB) 다운로드, 스킬 복사까지 한다. 맥은 whisper.cpp 가 애플 칩 GPU 로 받아쓴다.
+
+## 받아쓰기 엔진 (자동 선택)
+
+`scripts/fw_transcribe.py` 가 컴퓨터에 맞는 가장 빠른 엔진을 고른다. 어느 게 잡혔는지는 `python3 scripts/fw_transcribe.py --check` 로 본다.
+
+| 컴퓨터 | 엔진 | 속도 (영상 길이 대비) |
+|--------|------|------|
+| 윈도우 + 엔비디아 GPU | faster-whisper CUDA | 가장 빠름 |
+| 맥 (애플 칩) | whisper.cpp Metal | 약 15~20배 (M3 Pro 실측) |
+| 그 외 | faster-whisper CPU | 1.5~3배 |
+
 ## 업데이트
 
-맥에서 스킬을 고친 뒤 이 레포에 다시 올리면, 윈도우에서는 ZIP 을 다시 받아 `install.ps1` 을 다시 실행하면 된다.
+이 레포가 원본이다. 고친 뒤 올리면, 맥은 `git pull && bash install.sh`, 윈도우는 `git pull`(또는 ZIP 다시 받기) 후 `install.ps1` 을 다시 실행한다.
 
 ## 구성
 
@@ -27,3 +43,4 @@
 - `video-subtitle-clip/scripts/` — 자막 변환·싱크·검수·굽기 스크립트
 - `video-subtitle-clip/references/troubleshooting.md` — 막혔을 때 해결법
 - `install.ps1` — 윈도우 원클릭 설치
+- `install.sh` — 맥 원클릭 설치
