@@ -237,6 +237,7 @@ python3 scripts/build_from_groups.py base.srt groups.tsv dual.srt --ko ko.srt --
 - 원어 줄도 이때 교정한다 — 받아쓰기 오인식(`shoe`→show, `car`→card)이 아래 줄에 그대로 보이면 거슬린다. 확실한 것만 고친다.
 - 결과: 2,783조각 → **1,432줄**, 문장 절단 484 → 48(전부 긴 문장을 쉼표 자리에서 나눈 정상 분할).
 - 긴 영상은 번역자 여럿에게 나눠 맡기되, **경계를 큰 쉼(10초+) 자리**에 둔다. 문장 한가운데서 자르면 경계 문장이 깨진다. 용어표는 모두에게 같은 걸 준다.
+- 🔴 **한국어 마술 용어 표기는 `references/glossary.md`** (엠슬리 카운트 ○ / 엘름슬리 ✗) — 브리프에 표를 붙인다.
 
 ### 2-b3. 🔴 마커는 `references/markers.md` 대로 — DVD 챕터 경계에 이름만 붙이지 마라
 
@@ -427,12 +428,11 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 
 사용자에게 "됐다"고 말하기 전에 세 가지가 모두 통과해야 한다.
 
-
 ### 6-d~g. 층별 검수 · 긴 영상 · 용어 → `references/qa-long.md`
 
 - **qc.py (6-g)**: 렌더·납품 전 매번 돌려 FAIL 0 을 확인한다. 전체 밀림은 check_sync 가 못 잡으니 오프셋 스윕 비율로 본다.
 - **긴 영상 30분+ (6-d)**: 자막표 대신 SRT 파일을 산출물로 주고, 번역은 200큐 배치(`patch_srt.py`)로 큐 수를 매번 검증한다 — 한 줄 어긋나면 뒤가 전부 밀린다.
-- **도메인 용어 (6-e)**: initial_prompt 로 사전 주입 + 사후 일괄 치환. 치환 전 예외 목록을 만든다.
+- **도메인 용어 (6-e)**: initial_prompt 로 사전 주입 + 사후 일괄 치환. 치환 전 예외 목록을 만든다. 한국어 표기는 `references/glossary.md`.
 - **장시간 명령 (6-f)**: `| tail` 로 감싸지 말고 로그 파일로 리다이렉트한다.
 
 ## 이중 자막 규칙
@@ -468,6 +468,7 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 ## ✅ 끝내기 전 체크
 
 - [ ] `qc.py` FAIL 0 (6-g), 큐 수 원어 = 번역
+- [ ] `references/glossary.md` 끝의 grep 한 줄로 「쓰지 않을 표기」 0건
 - [ ] A: 렌더본 재받아쓰기로 `check_sync.py` 타이밍 검증(6-a)
 - [ ] 산출물 폴더에 이중 `.srt` 1개만 (`.ko.srt`/`.en.srt` 없음)
 - [ ] `_markers.txt` 가 있고, 「해법 없음」 항목은 이유를 확인했다. 마커 이름은 원어만(한국어 병기 없음)
@@ -483,19 +484,9 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 open "/path/to/output/folder"
 ```
 
-## 파이널컷으로 넘길 때
-
-FCP는 mkv·Vorbis·AVI를 못 읽는다. 자막 태우지 말고 이렇게 넘긴다:
-
-1. 구간을 H.264+AAC MP4(또는 ProRes MOV)로 변환 — 기본 `ffmpeg`으로 충분
-2. FCP에서 **파일 > 가져오기 > 자막**으로 `cut.srt` 임포트
-3. SRT가 0초 기준이면 "재생헤드 위치에 삽입", 프로젝트 타임코드 기준이면 "절대 타임코드"
-
-FCP 캡션은 스타일 자유도가 낮다. 색·폰트를 살려야 하면 이 스킬로 태우는 쪽이 낫다.
-
 ## 막혔을 때
 
-`references/troubleshooting.md` — 필터 없음, 폰트 깨짐, 싱크 밀림, 컨테이너 거짓말, yt-dlp 실패, 자막 큐 불일치.
+`references/troubleshooting.md` — 파이널컷으로 넘기기, 필터 없음, 폰트 깨짐, 싱크 밀림, 컨테이너 거짓말, yt-dlp 실패, 자막 큐 불일치.
 
 ## 유의
 
