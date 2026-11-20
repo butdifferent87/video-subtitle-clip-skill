@@ -190,6 +190,8 @@ python3 scripts/fw_transcribe.py audio.wav words.json turbo ja "도메인 용어
 python3 scripts/srt_from_whisper.py words.json base.srt --max-dur 4
 ```
 
+🔴 **VAD(말소리 감지)는 기본으로 꺼져 있다 — 켜지 마라.** 켜면 배경 음악 위의 말(공연·라이브 구간)을 통째로 버린다(일본 DVD 5권 648줄 실측). 예전 버전으로 받아쓴 결과가 공연 구간에서 비어 있으면 `references/qa-long.md` 6-h 대로 빈 구간만 채운다.
+
 `LANG`(넷째 인자)은 알면 반드시 지정한다(자동 감지가 틀리면 통째로 엉뚱한 언어로 받아쓴다). 모델은 `turbo`(large-v3-turbo)가 기본 — medium 보다 정확하고 GPU 에서 빠르다. 5분 넘는 영상이면 백그라운드로 돌리고 위 속도표로 예상 시간을 알려준다.
 
 **자동생성 자막·STT는 그대로 태우지 않는다.** 구두점이 없고 고유명사가 깨진다. 태우기 전에 읽고 교정한다 — 특히 사람 이름·지명·전문 용어. 교정본을 사용자에게 보여주고 넘어가는 게 안전하다.
@@ -467,7 +469,7 @@ python3 scripts/find_offset.py cut.srt words.json --apply fixed.srt   # 최적 �
 
 ## ✅ 끝내기 전 체크
 
-- [ ] `qc.py` FAIL 0 (6-g), 큐 수 원어 = 번역
+- [ ] `qc.py` FAIL 0 (6-g), 큐 수 원어 = 번역, 공연·음악 구간에 자막 공백 없음(있으면 qa-long 6-h)
 - [ ] `references/glossary.md` 끝의 grep 한 줄로 「쓰지 않을 표기」 0건
 - [ ] A: 렌더본 재받아쓰기로 `check_sync.py` 타이밍 검증(6-a)
 - [ ] 산출물 폴더에 이중 `.srt` 1개만 (`.ko.srt`/`.en.srt` 없음)

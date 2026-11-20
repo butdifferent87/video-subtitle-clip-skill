@@ -2,7 +2,7 @@
 """받아쓰기 → openai-whisper 호환 JSON. 맥·윈도우 공용, 가장 빠른 엔진을 자동으로 고른다.
 
 usage:
-  fw_transcribe.py IN.wav OUT.json [MODEL] [LANG] ["도메인 용어 프롬프트"] [--backend=auto|cuda|cpp|cpu]
+  fw_transcribe.py IN.wav OUT.json [MODEL] [LANG] ["도메인 용어 프롬프트"] [--backend=auto|cuda|cpp|cpu] [--vad]
   fw_transcribe.py --check        # 이 컴퓨터에서 어떤 엔진이 잡히는지만 본다
 
 MODEL 기본 = turbo (large-v3-turbo). medium·large-v3 등도 된다.
@@ -13,6 +13,10 @@ MODEL 기본 = turbo (large-v3-turbo). medium·large-v3 등도 된다.
             실측 M3 Pro + large-v3-turbo: 5분 오디오 20초(약 15배).
   3. cpu  — 위 둘 다 없을 때. faster-whisper int8. 실측 1.5~2.8배(느림).
 
+VAD(말소리 감지)는 기본으로 끈다. 켜면(--vad) 배경 음악 위의 말을 소음으로 보고 통째로 버린다
+— 실측: 일본 마술 DVD 공연 구간(음악+관객 대화) 5권에서 648줄이 사라졌다(2026-11-20).
+끄면 음악만 나오는 곳에 「ご視聴ありがとうございました」 같은 환각이 생기므로 HALLU 문구는 버린다.
+
 출력 형식은 엔진과 무관하게 같다 → srt_from_whisper.py·check_sync.py·
 align_second_lang.py·find_offset.py 를 그대로 쓴다.
 """
@@ -21,6 +25,7 @@ import json
 import math
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -28,12 +33,29 @@ import tempfile
 import time
 
 backend = "auto"
+USE_VAD = "--vad" in sys.argv
+# VAD 를 끄면 음악·무음 구간에 생기는 단골 환각 문구 — 세그먼트가 이것뿐이면 버린다 (fill_gaps.py 도 이 목록을 쓴다)
+HALLU = ["ご視聴ありがとうございました", "ご視聴ありがとうございます", "チャンネル登録", "最後までご視聴",
+         "Thank you for watching", "Thanks for watching", "Subtitles by", "Transcription by",
+         "시청해 주셔서 감사합니다", "구독과 좋아요"]   # fw_transcribe.py 와 fill_gaps.py 에서 같게 유지
+
+
+def is_hallu(text):
+    """HALLU 문구와 구두점·공백을 지우고 남는 글자가 3자 이하면 환각으로 본다 (정상 대사는 남긴다)."""
+    t = text.lower()
+    if not any(h.lower() in t for h in HALLU):
+        return False
+    for h in HALLU:
+        t = t.replace(h.lower(), "")
+    return len(re.sub(r"[\W_]+", "", t)) <= 3
 CHECK_ONLY = "--check" in sys.argv  # 어떤 엔진이 잡히는지만 출력하고 끝 (설치 확인용)
 args = []
 for a in sys.argv[1:]:
+    if a.startswith("--") and a not in ("--check", "--vad") and not a.startswith("--backend"):
+        sys.exit(f"알 수 없는 옵션: {a}\n" + __doc__)
     if a.startswith("--backend"):
         backend = a.split("=", 1)[1] if "=" in a else "auto"
-    elif a != "--check":
+    elif a not in ("--check", "--vad"):
         args.append(a)
 if len(args) < 2 and not CHECK_ONLY:
     sys.exit(__doc__)
@@ -98,7 +120,7 @@ def run_faster_whisper(device):
     segs, info = m.transcribe(
         wav, language=lang, word_timestamps=True,
         condition_on_previous_text=False, initial_prompt=prompt,
-        vad_filter=True, vad_parameters=dict(min_silence_duration_ms=500),
+        vad_filter=USE_VAD, vad_parameters=dict(min_silence_duration_ms=500) if USE_VAD else None,
     )
     print(f"lang={info.language} dur={info.duration:.0f}s", flush=True)
     t0, data = time.time(), {"language": info.language, "segments": []}
@@ -167,6 +189,12 @@ if CHECK_ONLY:
     sys.exit(0)
 t0 = time.time()
 data = run_whisper_cpp() if eng == "cpp" else run_faster_whisper("cuda" if eng == "cuda" else "cpu")
+before = len(data["segments"])
+data["segments"] = [sg for sg in data["segments"] if not is_hallu(sg["text"])]
+for i, sg in enumerate(data["segments"]):
+    sg["id"] = i
+if before - len(data["segments"]):
+    print(f"환각 문구 세그먼트 {before - len(data['segments'])}개 버림 (HALLU)", flush=True)
 json.dump(data, open(out, "w", encoding="utf-8"), ensure_ascii=False)
 n = sum(len(s["words"]) for s in data["segments"])
 dur = data["segments"][-1]["end"] if data["segments"] else 0

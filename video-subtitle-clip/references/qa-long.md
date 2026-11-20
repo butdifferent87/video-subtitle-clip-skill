@@ -128,3 +128,22 @@ grep -inE "\b(I|we|they|you|it'?s)\s+call(ed|s)?\s+(it|this|that|the|a)\b|so-?ca
 `ffmpeg ... | tail -2`, `whisper ... | tail -40` 처럼 쓰면 **파이프가 출력을 전부 버퍼링해서 끝날 때까지 한 글자도 안 나온다.** 진행률을 볼 수 없고, 사용자가 「어디까지 됐어?」라고 물어도 답할 수가 없다. 이 세션에서 두 번 반복한 실수다.
 
 진행률이 필요하면 파이프 없이 그대로 돌리고, 로그가 길면 파일로 리다이렉트한 뒤 `tail -f` 로 본다.
+
+### 6-h. 받아쓰기가 빈 구간 — 특히 음악 깔린 공연 구간
+
+**증상**: 해설은 자막이 빽빽한데 공연 구간(배경 음악 + 관객과 대화)만 자막이 비어 있다. 사용자가 「말이 있는데 자막이 빈다」고 한다.
+**원인**: faster-whisper 의 VAD(silero)가 음악 위의 말을 소음으로 판정해 잘라낸다. 받아쓰기 엔진은 그 구간을 아예 보지 못한다. 실측(ゆうきとも DVD 5권, 2026-11-20): VAD 켬 → 공연 구간 거의 0줄, VAD 끔 → 648줄 복구.
+**지금은 `fw_transcribe.py` 가 VAD 를 기본으로 끈다.** 대신 음악만 나오는 곳에 「ご視聴ありがとうございました」류 환각이 생기는데, 스크립트가 HALLU 목록으로 버린다.
+
+**이미 번역까지 끝난 자막에 빈 구간만 채울 때** (전체를 다시 번역하지 않는다):
+
+```bash
+python3 scripts/fw_transcribe.py audio.wav nv.json turbo ja "용어"      # VAD 끈 받아쓰기
+python3 scripts/srt_from_whisper.py nv.json nv.srt --max-dur 4 --cjk
+python3 scripts/fill_gaps.py gap   final.dual.srt nv.srt gap.srt       # 기존 자막과 30% 넘게 겹치는 큐는 버림
+# gap.srt 를 평소처럼 문장 묶음으로 번역 → build_from_groups.py → gap.dual.srt
+python3 scripts/fill_gaps.py merge final.dual.srt gap.dual.srt merged.srt   # 시각순 병합, 겹침 수 출력
+```
+
+번역자에게는 「조각이 띄엄띄엄 떨어져 있다 — 2초 넘게 떨어진 조각은 묶지 마라(사이에 기존 자막이 있다)」를 꼭 알린다.
+
