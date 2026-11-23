@@ -30,7 +30,7 @@
 | 컴퓨터 | 엔진 | 속도 (영상 길이 대비) |
 |--------|------|------|
 | 윈도우 + 엔비디아 GPU | faster-whisper CUDA | 가장 빠름 |
-| 맥 (애플 칩) | whisper.cpp Metal | 약 15~20배 (M3 Pro 실측) |
+| 맥 (애플 칩) | whisper.cpp Metal | 약 15배 (M3 Pro 실측, 정밀 시각 포함) |
 | 그 외 | faster-whisper CPU | 1.5~3배 |
 
 ## 업데이트

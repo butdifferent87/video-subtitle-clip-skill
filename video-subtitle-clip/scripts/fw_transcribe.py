@@ -137,6 +137,29 @@ def run_faster_whisper(device):
     return data
 
 
+# whisper.cpp 기본 시각은 음악·긴 쉼 뒤에서 1~12초 앞으로 밀린다(실측 2026-11-22: 렉처 20편 1,172줄 교정).
+# -dtw 는 단어 시각을 주의(attention) 정렬로 다시 잡는다. 받아쓰기 속도는 거의 같다.
+DTW_PRESET = {"large-v3-turbo": "large.v3.turbo", "large-v3": "large.v3", "large-v2": "large.v2",
+              "medium": "medium", "medium.en": "medium.en", "small": "small", "small.en": "small.en",
+              "base": "base", "base.en": "base.en"}
+DTW_BIAS = 0.2  # faster-whisper 단어 시각보다 일정하게 0.2초 늦다
+
+
+def dtw_ok(words, floor):
+    """음악 위 대사에서는 DTW 가 여러 단어를 한 점에 뭉치거나 뚝 떨어뜨린다 — 그런 세그먼트는 버린다."""
+    ds = [w["d0"] for w in words]
+    if any(d is None for d in ds) or any(b < a - 0.05 for a, b in zip(ds, ds[1:])):
+        return False
+    n = len(ds) - 1
+    if n >= 3 and ds[-1] - ds[0] < 0.11 * n:
+        return False
+    if any(ds[k + 4] - ds[k] < 0.25 for k in range(len(ds) - 4)):
+        return False
+    if any(b - a > 6 for a, b in zip(ds, ds[1:])):
+        return False
+    return ds[0] >= floor - 0.3
+
+
 def run_whisper_cpp():
     """whisper.cpp 는 토큰 단위 시각을 준다 → 공백으로 시작하는 토큰에서 새 단어를 연다.
     -mc 0 = 앞 문맥을 안 넘긴다(faster-whisper 의 condition_on_previous_text=False 와 같은 뜻).
@@ -146,6 +169,9 @@ def run_whisper_cpp():
     base = os.path.join(tmp, "out")
     cmd = ["whisper-cli", "-m", model, "-f", wav, "-ojf", "-of", base, "-np",
            "-mc", "0", "-t", str(min(8, os.cpu_count() or 4))]
+    preset = DTW_PRESET.get(ALIASES.get(model_name, model_name))
+    if preset:
+        cmd += ["-dtw", preset, "-nfa"]  # DTW 는 flash attention 을 꺼야 나온다
     if lang:
         cmd += ["-l", lang]
     if prompt:
@@ -156,6 +182,8 @@ def run_whisper_cpp():
         sys.exit(r.stderr[-3000:])
     raw = json.load(open(base + ".json", encoding="utf-8"))
     data = {"language": lang or raw.get("result", {}).get("language"), "segments": []}
+    dtw_segs = fallback = 0
+    floor = 0.0
     for i, seg in enumerate(raw["transcription"]):
         words = []
         for tok in seg.get("tokens", []):
@@ -163,23 +191,44 @@ def run_whisper_cpp():
             if t.startswith("[_") or t.startswith("<|"):
                 continue
             st, en = tok["offsets"]["from"] / 1000, tok["offsets"]["to"] / 1000
+            d = tok.get("t_dtw", -1)
+            d = d / 100 - DTW_BIAS if d is not None and d >= 0 else None
             p = tok.get("p", 1.0)
             if words and not t.startswith(" "):
                 w = words[-1]
                 w["word"] += t
                 w["end"] = en
+                w["d1"] = d
                 w["probability"] = min(w["probability"], p)
             elif t.strip():
-                words.append({"word": t, "start": st, "end": en, "probability": p})
+                words.append({"word": t, "start": st, "end": en, "probability": p, "d0": d, "d1": d})
+        if preset and words:
+            if dtw_ok(words, floor):
+                dtw_segs += 1
+                for k, w in enumerate(words):
+                    nx = words[k + 1]["d0"] if k + 1 < len(words) else None
+                    w["start"] = max(0.0, w["d0"])
+                    w["end"] = max(w["start"], w["d1"]) + 0.35
+                    if nx is not None:
+                        w["end"] = max(w["start"], min(w["end"], nx))
+            else:
+                fallback += 1
+            floor = words[-1]["start"]
+        for w in words:
+            w.pop("d0", None)
+            w.pop("d1", None)
         ps = [w["probability"] for w in words] or [1.0]
         data["segments"].append({
-            "id": i, "start": seg["offsets"]["from"] / 1000, "end": seg["offsets"]["to"] / 1000,
+            "id": i, "start": words[0]["start"] if words else seg["offsets"]["from"] / 1000,
+            "end": words[-1]["end"] if words else seg["offsets"]["to"] / 1000,
             "text": seg["text"],
             "no_speech_prob": None,  # whisper.cpp 는 안 준다 — 환각 판정은 qc.py --wav 가 따로 한다
             "avg_logprob": sum(math.log(max(p, 1e-6)) for p in ps) / len(ps),
             "words": words,
         })
     shutil.rmtree(tmp, ignore_errors=True)
+    if preset:
+        print(f"DTW 시각 {dtw_segs}개 세그먼트 적용, {fallback}개는 기본 시각 유지", flush=True)
     return data
 
 
